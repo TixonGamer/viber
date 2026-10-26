@@ -3,7 +3,6 @@
 
   const MIN_DELAY = 8000;
   const MAX_DELAY = 12000;
-  const EFFECT_DURATION = 2500;
   const AUDIO_GAIN = 1; // 100% site volume. The source PCM peaks at 0.99, without added clipping.
   const $ = (id) => document.getElementById(id);
   const board = $('board');
@@ -14,7 +13,6 @@
   let target = 0;
   let soundEnabled = true;
   let triggerTimer;
-  let finishTimer;
   let audioContext;
   let masterGain;
   let soundBuffer;
@@ -53,7 +51,7 @@
     $('feedback').textContent = 'Звук недоступен в этом браузере. Игра продолжается.';
   }
 
-  function unlockAudio() {
+  function unlockAudio(onReady) {
     if (!soundEnabled) return;
     try {
       if (!audioContext) {
@@ -67,7 +65,9 @@
       if (!soundBuffer) soundBuffer = loadSound(audioContext);
       // resume() and a silent source run directly in the click handler, including iOS.
       const resumed = audioContext.resume();
-      if (resumed) resumed.catch(markAudioUnavailable);
+      Promise.resolve(resumed).then(() => {
+        if (onReady) onReady();
+      }).catch(markAudioUnavailable);
       const silent = audioContext.createBufferSource();
       silent.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
       silent.connect(masterGain);
@@ -93,6 +93,7 @@
     try {
       const current = audioContext.createBufferSource();
       current.buffer = soundBuffer;
+      current.loop = true;
       current.connect(masterGain);
       current.onended = () => {
         current.disconnect();
@@ -140,7 +141,6 @@
 
   function clearTimers() {
     window.clearTimeout(triggerTimer);
-    window.clearTimeout(finishTimer);
   }
 
   function startGame() {
@@ -171,7 +171,6 @@
     document.body.classList.add('effect-open');
     $('close-scare').focus({ preventScroll: true });
     playSound();
-    finishTimer = window.setTimeout(() => finishGame('prank'), EFFECT_DURATION);
   }
 
   function finishGame(reason = 'prank', moveFocus = true) {
@@ -204,9 +203,10 @@
       if (masterGain) masterGain.gain.value = 0;
       stopSound();
     } else {
-      unlockAudio();
+      unlockAudio(() => {
+        if (state === 'scare' && soundEnabled && !source) playSound();
+      });
       if (masterGain) masterGain.gain.value = AUDIO_GAIN;
-      // Do not replay the surprise sound mid-effect when unmuting.
     }
     updateSoundButtons();
   }));

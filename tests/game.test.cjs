@@ -77,7 +77,7 @@ test('idle never schedules a surprise', () => {
   assert.ok(env.ids.board.children.every(tile => tile.disabled));
 });
 
-test('random interval stays within 8–12 seconds, effect lasts 2.5 seconds', () => {
+test('random interval stays within 8–12 seconds; effect loops until closed', () => {
   for (const random of [0, 0.5, 0.999999]) {
     const env = setup({ random });
     env.ids.start.click();
@@ -88,9 +88,13 @@ test('random interval stays within 8–12 seconds, effect lasts 2.5 seconds', ()
     env.tick(1);
     assert.equal(env.ids.scare.hidden, false);
     assert.equal(env.ids.page.inert, true);
-    env.tick(2499);
+    env.tick(60000);
     assert.equal(env.ids.scare.hidden, false);
-    env.tick(1);
+    assert.equal(env.sources[1].loop, true);
+    assert.equal(env.sources[1].stopped, undefined);
+    assert.equal(env.sources.length, 2); // One looping source; no accumulated players.
+    assert.equal(env.timers.size, 0);
+    env.ids['close-scare'].click();
     assert.equal(env.ids.scare.hidden, true);
     assert.equal(env.ids.page.inert, false);
     assert.equal(env.ids['result-title'].textContent, 'Это был розыгрыш!');
@@ -107,6 +111,7 @@ test('correct answers increase score, wrong answers do not; replay resets', () =
   env.ids.board.children[8].click();
   assert.equal(env.ids.score.textContent, '01');
   env.tick(12500);
+  env.ids['close-scare'].click();
   assert.equal(env.ids['final-score'].textContent, '1');
   env.ids.restart.click();
   assert.equal(env.ids.score.textContent, '00');
@@ -121,6 +126,7 @@ test('mute before start survives replay and never plays sound', () => {
   env.buttons[0].click();
   env.ids.start.click();
   env.tick(12500);
+  env.ids['close-scare'].click();
   env.ids.restart.click();
   env.tick(10000);
   assert.equal(env.sources.length, 0);
@@ -185,11 +191,13 @@ test('missing or blocked Web Audio does not break the game', async () => {
   for (const config of [{ audio: false }, { resumeFails: true }, { missingRecording: true }]) {
     const env = setup(config);
     env.ids.start.click();
-    await Promise.resolve();
+    await new Promise(setImmediate);
     assert.equal(env.buttons[0].attributes['aria-pressed'], 'false');
     env.tick(10000);
     assert.equal(env.ids.scare.hidden, false);
     env.tick(2500);
+    assert.equal(env.ids.scare.hidden, false);
+    env.ids['close-scare'].click();
     assert.equal(env.ids['result-panel'].hidden, false);
   }
 });
@@ -201,16 +209,45 @@ test('duplicate start does not stack surprise timers', () => {
   assert.equal(env.timers.size, 1);
 });
 
-test('unmuting restores full volume on replay without replaying an active scream', () => {
+test('unmuting restarts the loop; replay never leaves an older loop running', async () => {
   const env = setup();
   env.ids.start.click();
   env.tick(10000);
   env.buttons[1].click();
   env.buttons[1].click();
+  await new Promise(setImmediate);
   assert.equal(env.gains[0].gain.value, 1);
-  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 1);
+  const firstLoops = env.sources.filter(source => source.buffer.length > 1);
+  assert.equal(firstLoops.length, 2);
+  assert.equal(firstLoops[0].stopped, true);
+  assert.equal(firstLoops[1].loop, true);
   env.ids['close-scare'].click();
+  assert.equal(firstLoops[1].stopped, true);
   env.ids.restart.click();
   env.tick(10000);
-  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 2);
+  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 3);
+});
+
+test('closing during audio resume cannot restart the loop in the background', async () => {
+  const env = setup();
+  env.buttons[0].click();
+  env.ids.start.click();
+  env.tick(10000);
+  env.buttons[1].click();
+  env.ids['close-scare'].click();
+  await new Promise(setImmediate);
+  assert.equal(env.ids.scare.hidden, true);
+  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 0);
+});
+
+test('first unmute during a silent effect starts exactly one loop', async () => {
+  const env = setup();
+  env.buttons[0].click();
+  env.ids.start.click();
+  env.tick(10000);
+  env.buttons[1].click();
+  await new Promise(setImmediate);
+  const loops = env.sources.filter(source => source.buffer.length > 1);
+  assert.equal(loops.length, 1);
+  assert.equal(loops[0].loop, true);
 });
