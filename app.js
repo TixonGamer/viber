@@ -7,11 +7,9 @@
   const $ = (id) => document.getElementById(id);
   const board = $('board');
   const scare = $('scare');
-  const soundButtons = [...document.querySelectorAll('[data-sound]')];
   let state = 'ready';
   let score = 0;
   let target = 0;
-  let soundEnabled = true;
   let triggerTimer;
   let audioContext;
   let masterGain;
@@ -36,23 +34,12 @@
     return buffer;
   }
 
-  function updateSoundButtons() {
-    soundButtons.forEach((button) => {
-      button.setAttribute('aria-pressed', String(soundEnabled));
-      button.querySelector('[data-sound-label]').textContent = soundEnabled ? 'Звук включён' : 'Звук выключен';
-      button.setAttribute('aria-label', soundEnabled ? 'Выключить звук' : 'Включить звук');
-    });
-  }
-
   function markAudioUnavailable() {
     audioUnavailable = true;
-    soundEnabled = false;
-    updateSoundButtons();
     $('feedback').textContent = 'Звук недоступен в этом браузере. Игра продолжается.';
   }
 
-  function unlockAudio(onReady) {
-    if (!soundEnabled) return;
+  function unlockAudio() {
     try {
       if (!audioContext) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -65,9 +52,7 @@
       if (!soundBuffer) soundBuffer = loadSound(audioContext);
       // resume() and a silent source run directly in the click handler, including iOS.
       const resumed = audioContext.resume();
-      Promise.resolve(resumed).then(() => {
-        if (onReady) onReady();
-      }).catch(markAudioUnavailable);
+      Promise.resolve(resumed).catch(markAudioUnavailable);
       const silent = audioContext.createBufferSource();
       silent.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
       silent.connect(masterGain);
@@ -88,7 +73,7 @@
   }
 
   function playSound() {
-    if (!soundEnabled || !audioContext || audioContext.state !== 'running') return;
+    if (audioUnavailable || !audioContext || audioContext.state !== 'running') return;
     stopSound();
     try {
       const current = audioContext.createBufferSource();
@@ -152,7 +137,6 @@
     $('score').textContent = '00';
     $('start-panel').hidden = true;
     $('result-panel').hidden = true;
-    $('stop').hidden = false;
     $('game-status').textContent = 'ИЩИТЕ ОТЛИЧИЕ';
     $('feedback').textContent = 'Нажмите на квадрат другого оттенка.';
     renderBoard();
@@ -164,70 +148,42 @@
 
   function showScare() {
     if (state !== 'playing') return;
-    if (document.hidden) { finishGame('paused'); return; }
+    if (document.hidden) { finishGame(); return; }
     state = 'scare';
     scare.hidden = false;
     $('page').inert = true;
     document.body.classList.add('effect-open');
-    $('close-scare').focus({ preventScroll: true });
+    scare.focus({ preventScroll: true });
     playSound();
   }
 
-  function finishGame(reason = 'prank', moveFocus = true) {
+  function finishGame() {
     if (state !== 'playing' && state !== 'scare') return;
+    const wasPrank = state === 'scare';
     clearTimers();
     stopSound();
     state = 'finished';
     scare.hidden = true;
     $('page').inert = false;
     document.body.classList.remove('effect-open');
-    $('stop').hidden = true;
     [...board.children].forEach((tile) => { tile.disabled = true; });
     $('result-panel').hidden = false;
     $('final-score').textContent = String(score);
     $('game-status').textContent = 'РАУНД ЗАВЕРШЁН';
     $('feedback').textContent = 'Ещё один раунд?';
-    const wasPrank = reason === 'prank';
     $('result-title').textContent = wasPrank ? 'Это был розыгрыш!' : 'Раунд завершён';
     $('result-description').textContent = wasPrank
       ? 'Всё хорошо. Наш загадочный гость уже ушёл.'
-      : reason === 'paused' ? 'Вы отвлеклись — мы остановили игру. Начните снова, когда будете готовы.' : 'Можно выдохнуть и попробовать ещё раз.';
+      : 'Вы отвлеклись — мы остановили игру. Начните снова, когда будете готовы.';
     $('result-panel').querySelector('.eyebrow').textContent = wasPrank ? 'НЕОЖИДАННЫЙ ФИНАЛ' : 'МОЖНО СДЕЛАТЬ ПАУЗУ';
     $('result-panel').querySelector('.start-hint').textContent = wasPrank ? 'Теперь вы знаете наш маленький секрет.' : 'Новый раунд начнётся только по нажатию.';
-    if (moveFocus) $('restart').focus({ preventScroll: true });
   }
 
-  soundButtons.forEach((button) => button.addEventListener('click', () => {
-    soundEnabled = !soundEnabled;
-    if (!soundEnabled) {
-      if (masterGain) masterGain.gain.value = 0;
-      stopSound();
-    } else {
-      unlockAudio(() => {
-        if (state === 'scare' && soundEnabled && !source) playSound();
-      });
-      if (masterGain) masterGain.gain.value = AUDIO_GAIN;
-    }
-    updateSoundButtons();
-  }));
   $('start').addEventListener('click', startGame);
   $('restart').addEventListener('click', startGame);
-  $('stop').addEventListener('click', () => finishGame('stopped'));
-  $('close-scare').addEventListener('click', () => finishGame('prank'));
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') finishGame(state === 'scare' ? 'prank' : 'stopped');
-    if (event.key === 'Tab' && state === 'scare') {
-      const buttons = [...scare.querySelectorAll('button')];
-      const first = buttons[0];
-      const last = buttons[buttons.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    }
-  });
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) finishGame('paused', false);
+    if (document.hidden) finishGame();
   });
-  window.addEventListener('pagehide', () => finishGame('paused', false));
+  window.addEventListener('pagehide', finishGame);
   renderBoard();
-  updateSoundButtons();
 })();

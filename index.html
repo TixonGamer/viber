@@ -17,7 +17,6 @@
     <header class="header">
       <a class="brand" href="./" aria-label="Оттенок — главная"><img src="./assets/icon.svg" width="34" height="34" alt="">оттенок<span class="brand-dot">.</span></a>
       <span class="header-caption">МАЛЕНЬКАЯ ПАУЗА ДЛЯ МОЗГА</span>
-      <button class="sound-button" data-sound aria-pressed="true" type="button"><span class="sound-dot" aria-hidden="true"></span><span data-sound-label>Звук включён</span></button>
     </header>
 
     <main class="layout">
@@ -44,18 +43,16 @@
             <div class="result-icon" aria-hidden="true">☺</div><span class="eyebrow">НЕОЖИДАННЫЙ ФИНАЛ</span><h2 id="result-title">Это был розыгрыш!</h2><p id="result-description">Всё хорошо. Наш загадочный гость уже ушёл.</p><p class="result-score">Найдено отличий: <strong id="final-score">0</strong></p><button class="primary" id="restart" type="button">Повторить игру <span aria-hidden="true">↻</span></button><span class="start-hint">Теперь вы знаете наш маленький секрет.</span>
           </div>
         </div>
-        <div class="game-bottom"><span id="feedback" role="status" aria-live="polite">У каждого оттенка есть своя история.</span><button id="stop" class="text-button" type="button" hidden>Завершить</button><span class="board-mark" aria-hidden="true">✳</span></div>
+        <div class="game-bottom"><span id="feedback" role="status" aria-live="polite">У каждого оттенка есть своя история.</span><span class="board-mark" aria-hidden="true">✳</span></div>
       </section>
     </main>
     <footer class="footer"><span>Смотрите внимательнее. Улыбайтесь чаще.</span><span>Без трекеров <span class="footer-dot">·</span> Всё происходит в вашем браузере</span></footer>
     <noscript><p class="noscript">Для игры включите JavaScript в настройках браузера.</p></noscript>
   </div>
 
-  <div id="scare" class="scare" role="dialog" aria-modal="true" aria-labelledby="scare-label" hidden>
-    <h2 id="scare-label" class="sr-only">Скример повторяется. Нажмите «Закрыть» или Escape, чтобы остановить.</h2>
+  <div id="scare" class="scare" role="region" aria-labelledby="scare-label" tabindex="-1" hidden>
+    <h2 id="scare-label" class="sr-only">Скример повторяется. Чтобы остановить, закройте страницу или перейдите на другую вкладку.</h2>
     <img id="scare-image" class="scare-image" src="./assets/scare-face.jpg" alt="Лицо из ролика: большие круглые глаза и широкая улыбка" width="628" height="480">
-    <div class="scare-controls"><button class="scare-button" data-sound aria-pressed="true" type="button"><span data-sound-label>Звук включён</span></button><button class="scare-button" id="close-scare" type="button">Закрыть <span aria-hidden="true">×</span></button></div>
-    <p class="escape-hint">Esc — закрыть</p>
   </div>
 </body>
 </html>

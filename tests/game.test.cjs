@@ -24,19 +24,15 @@ function setup({ audio = true, random = 0.5, resumeFails = false, missingRecordi
     querySelectorAll() { return this.children; }
     click() { if (!this.disabled) this.listeners.click?.(); }
   }
-  const ids = Object.fromEntries(['board', 'scare', 'page', 'score', 'feedback', 'start-panel', 'result-panel', 'stop', 'game-status', 'final-score', 'result-title', 'result-description', 'start', 'restart', 'close-scare'].map(id => [id, new Element()]));
+  const ids = Object.fromEntries(['board', 'scare', 'page', 'score', 'feedback', 'start-panel', 'result-panel', 'game-status', 'final-score', 'result-title', 'result-description', 'start', 'restart'].map(id => [id, new Element()]));
   ids['result-panel'].parts = { '.eyebrow': new Element(), '.start-hint': new Element() };
   ids.scare.hidden = true;
   ids['result-panel'].hidden = true;
-  const buttons = [new Element(), new Element()];
-  buttons.forEach(button => { button.parts = { '[data-sound-label]': new Element() }; });
-  ids.scare.children = [buttons[1], ids['close-scare']];
   const document = new Element();
   document.hidden = false;
   document.getElementById = id => ids[id];
   document.createElement = () => new Element();
   document.createDocumentFragment = () => new Element();
-  document.querySelectorAll = () => buttons;
   document.body = { classList: { add() {}, remove() {} } };
   class AudioContext {
     constructor() { this.sampleRate = 8000; this.state = 'running'; }
@@ -65,8 +61,8 @@ function setup({ audio = true, random = 0.5, resumeFails = false, missingRecordi
     }
     clock = end;
   }
-  const key = value => document.listeners.keydown({ key: value });
-  return { ids, buttons, tick, timers, document, window, sources, buffers, gains, key };
+  const key = value => document.listeners.keydown?.({ key: value });
+  return { ids, tick, timers, document, window, sources, buffers, gains, key };
 }
 
 test('idle never schedules a surprise', () => {
@@ -94,11 +90,10 @@ test('random interval stays within 8–12 seconds; effect loops until closed', (
     assert.equal(env.sources[1].stopped, undefined);
     assert.equal(env.sources.length, 2); // One looping source; no accumulated players.
     assert.equal(env.timers.size, 0);
-    env.ids['close-scare'].click();
+    env.window.listeners.pagehide();
     assert.equal(env.ids.scare.hidden, true);
     assert.equal(env.ids.page.inert, false);
     assert.equal(env.ids['result-title'].textContent, 'Это был розыгрыш!');
-    assert.equal(env.document.activeElement, env.ids.restart);
     assert.equal(env.timers.size, 0);
   }
 });
@@ -111,7 +106,7 @@ test('correct answers increase score, wrong answers do not; replay resets', () =
   env.ids.board.children[8].click();
   assert.equal(env.ids.score.textContent, '01');
   env.tick(12500);
-  env.ids['close-scare'].click();
+  env.window.listeners.pagehide();
   assert.equal(env.ids['final-score'].textContent, '1');
   env.ids.restart.click();
   assert.equal(env.ids.score.textContent, '00');
@@ -121,19 +116,8 @@ test('correct answers increase score, wrong answers do not; replay resets', () =
   assert.equal(env.ids.scare.hidden, false);
 });
 
-test('mute before start survives replay and never plays sound', () => {
-  const env = setup();
-  env.buttons[0].click();
-  env.ids.start.click();
-  env.tick(12500);
-  env.ids['close-scare'].click();
-  env.ids.restart.click();
-  env.tick(10000);
-  assert.equal(env.sources.length, 0);
-  assert.equal(env.buttons[1].attributes['aria-pressed'], 'false');
-});
 
-test('original 2.5s scream plays at 100% gain without clipping; mute stops it', () => {
+test('original 2.5s scream loops at full gain; leaving the page stops it', () => {
   const env = setup();
   env.ids.start.click();
   assert.equal(env.sources.length, 1); // Silent unlock only.
@@ -146,26 +130,15 @@ test('original 2.5s scream plays at 100% gain without clipping; mute stops it', 
   env.tick(10000);
   assert.equal(env.sources.length, 2);
   assert.equal(env.sources[1].started, true);
-  env.buttons[1].click();
+  assert.equal(env.sources[1].loop, true);
+  env.window.listeners.pagehide();
   assert.equal(env.sources[1].stopped, true);
-  assert.equal(env.gains[0].gain.value, 0);
-  assert.equal(env.ids.scare.hidden, false);
+  assert.equal(env.ids.scare.hidden, true);
 });
 
-test('close and Escape stop sound and all timers immediately', () => {
-  for (const close of [env => env.ids['close-scare'].click(), env => env.key('Escape')]) {
-    const env = setup();
-    env.ids.start.click();
-    env.tick(10000);
-    close(env);
-    assert.equal(env.ids.scare.hidden, true);
-    assert.equal(env.sources[1].stopped, true);
-    assert.equal(env.timers.size, 0);
-  }
-});
 
-test('stop, Escape, hidden tab and page exit cancel pending effects', () => {
-  for (const cancel of [env => env.ids.stop.click(), env => env.key('Escape'), env => { env.document.hidden = true; env.document.listeners.visibilitychange(); }, env => env.window.listeners.pagehide()]) {
+test('hidden tab and page exit cancel pending effects', () => {
+  for (const cancel of [env => { env.document.hidden = true; env.document.listeners.visibilitychange(); }, env => env.window.listeners.pagehide()]) {
     const env = setup();
     env.ids.start.click();
     cancel(env);
@@ -192,12 +165,12 @@ test('missing or blocked Web Audio does not break the game', async () => {
     const env = setup(config);
     env.ids.start.click();
     await new Promise(setImmediate);
-    assert.equal(env.buttons[0].attributes['aria-pressed'], 'false');
+    assert.match(env.ids.feedback.textContent, /без звука|Звук недоступен/);
     env.tick(10000);
     assert.equal(env.ids.scare.hidden, false);
     env.tick(2500);
     assert.equal(env.ids.scare.hidden, false);
-    env.ids['close-scare'].click();
+    env.window.listeners.pagehide();
     assert.equal(env.ids['result-panel'].hidden, false);
   }
 });
@@ -209,45 +182,33 @@ test('duplicate start does not stack surprise timers', () => {
   assert.equal(env.timers.size, 1);
 });
 
-test('unmuting restarts the loop; replay never leaves an older loop running', async () => {
+
+
+
+test('Escape is unhandled and browser navigation is not intercepted', () => {
   const env = setup();
   env.ids.start.click();
+  env.key('Escape');
+  assert.equal(env.timers.size, 1);
   env.tick(10000);
-  env.buttons[1].click();
-  env.buttons[1].click();
-  await new Promise(setImmediate);
-  assert.equal(env.gains[0].gain.value, 1);
-  const firstLoops = env.sources.filter(source => source.buffer.length > 1);
-  assert.equal(firstLoops.length, 2);
-  assert.equal(firstLoops[0].stopped, true);
-  assert.equal(firstLoops[1].loop, true);
-  env.ids['close-scare'].click();
-  assert.equal(firstLoops[1].stopped, true);
-  env.ids.restart.click();
-  env.tick(10000);
-  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 3);
+  env.key('Escape');
+  assert.equal(env.ids.scare.hidden, false);
+  assert.equal(env.sources[1].stopped, undefined);
+  assert.equal(env.document.listeners.keydown, undefined);
+  assert.equal(env.window.listeners.beforeunload, undefined);
+  assert.equal(env.window.listeners.popstate, undefined);
 });
 
-test('closing during audio resume cannot restart the loop in the background', async () => {
+test('returning to the tab does not restart the effect automatically', () => {
   const env = setup();
-  env.buttons[0].click();
   env.ids.start.click();
   env.tick(10000);
-  env.buttons[1].click();
-  env.ids['close-scare'].click();
-  await new Promise(setImmediate);
+  env.document.hidden = true;
+  env.document.listeners.visibilitychange();
+  env.document.hidden = false;
+  env.document.listeners.visibilitychange();
+  env.tick(60000);
   assert.equal(env.ids.scare.hidden, true);
-  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 0);
-});
-
-test('first unmute during a silent effect starts exactly one loop', async () => {
-  const env = setup();
-  env.buttons[0].click();
-  env.ids.start.click();
-  env.tick(10000);
-  env.buttons[1].click();
-  await new Promise(setImmediate);
-  const loops = env.sources.filter(source => source.buffer.length > 1);
-  assert.equal(loops.length, 1);
-  assert.equal(loops[0].loop, true);
+  assert.equal(env.sources[1].stopped, true);
+  assert.equal(env.timers.size, 0);
 });
