@@ -4,7 +4,7 @@
   const MIN_DELAY = 8000;
   const MAX_DELAY = 12000;
   const EFFECT_DURATION = 2500;
-  const AUDIO_GAIN = 0.6; // The generated waveform is also capped at ±0.16.
+  const AUDIO_GAIN = 1; // 100% site volume. The source PCM peaks at 0.99, without added clipping.
   const $ = (id) => document.getElementById(id);
   const board = $('board');
   const scare = $('scare');
@@ -21,22 +21,19 @@
   let source;
   let audioUnavailable = false;
 
-  // Everything is synthesized locally: no audio files, requests, or libraries.
-  function makeSound(context) {
-    const length = Math.ceil(context.sampleRate * EFFECT_DURATION / 1000);
-    const buffer = context.createBuffer(1, length, context.sampleRate);
+  // The original scream is bundled as PCM16. No network fetch or decoder is
+  // needed here, so opening index.html directly from disk also works.
+  function loadSound(context) {
+    const recording = window.SCARE_AUDIO;
+    if (!recording || !recording.base64 || !recording.sampleRate) throw new Error('Missing audio');
+    const bytes = window.atob(recording.base64);
+    const length = bytes.length / 2;
+    if (!Number.isInteger(length) || length === 0) throw new Error('Invalid PCM');
+    const buffer = context.createBuffer(1, length, recording.sampleRate);
     const samples = buffer.getChannelData(0);
-    let phase = 0;
-    let noise = 0;
     for (let i = 0; i < length; i++) {
-      const t = i / context.sampleRate;
-      const frequency = 190 + 260 * Math.exp(-t * 2.2) + 35 * Math.sin(t * 27);
-      phase += 2 * Math.PI * frequency / context.sampleRate;
-      noise = noise * 0.87 + (Math.random() * 2 - 1) * 0.13;
-      // Short attack/release avoid clicks; no sharp, high-frequency scream.
-      const envelope = Math.min(1, t / 0.025) * Math.min(1, (2.5 - t) / 0.3);
-      samples[i] = Math.max(-0.16, Math.min(0.16,
-        (Math.sin(phase) * 0.095 + Math.sin(phase * 0.5) * 0.035 + noise * 0.03) * envelope));
+      const value = bytes.charCodeAt(i * 2) | (bytes.charCodeAt(i * 2 + 1) << 8);
+      samples[i] = (value >= 0x8000 ? value - 0x10000 : value) / 32768;
     }
     return buffer;
   }
@@ -66,8 +63,8 @@
         masterGain = audioContext.createGain();
         masterGain.gain.value = AUDIO_GAIN;
         masterGain.connect(audioContext.destination);
-        soundBuffer = makeSound(audioContext);
       }
+      if (!soundBuffer) soundBuffer = loadSound(audioContext);
       // resume() and a silent source run directly in the click handler, including iOS.
       const resumed = audioContext.resume();
       if (resumed) resumed.catch(markAudioUnavailable);

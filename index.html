@@ -7,8 +7,9 @@
   <meta name="description" content="Небольшая игра на внимательность. Найдите квадрат, который отличается оттенком.">
   <title>Оттенок — проверь свою внимательность</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
-  <link rel="preload" href="./assets/visitor.svg" as="image">
+  <link rel="preload" href="./assets/scare-face.jpg" as="image">
   <link rel="stylesheet" href="./styles.css">
+  <script src="./assets/scare-audio.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -52,7 +53,7 @@
 
   <div id="scare" class="scare" role="dialog" aria-modal="true" aria-labelledby="scare-label" hidden>
     <h2 id="scare-label" class="sr-only">Неожиданный гость! Эффект закончится через 2,5 секунды.</h2>
-    <img id="scare-image" class="scare-image" src="./assets/visitor.svg" alt="Нарисованный призрак с большими глазами и открытым ртом" width="1000" height="1000">
+    <img id="scare-image" class="scare-image" src="./assets/scare-face.jpg" alt="Лицо из ролика: большие круглые глаза и широкая улыбка" width="628" height="480">
     <div class="scare-controls"><button class="scare-button" data-sound aria-pressed="true" type="button"><span data-sound-label>Звук включён</span></button><button class="scare-button" id="close-scare" type="button">Закрыть <span aria-hidden="true">×</span></button></div>
     <p class="escape-hint">Esc — закрыть</p>
   </div>

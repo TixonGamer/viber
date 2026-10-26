@@ -4,8 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const code = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+const audioCode = fs.readFileSync(path.join(__dirname, '..', 'assets', 'scare-audio.js'), 'utf8');
 
-function setup({ audio = true, random = 0.5, resumeFails = false } = {}) {
+function setup({ audio = true, random = 0.5, resumeFails = false, missingRecording = false } = {}) {
   let clock = 0;
   let nextTimer = 0;
   const timers = new Map();
@@ -41,10 +42,12 @@ function setup({ audio = true, random = 0.5, resumeFails = false } = {}) {
     constructor() { this.sampleRate = 8000; this.state = 'running'; }
     resume() { return resumeFails ? Promise.reject(new Error('Blocked')) : Promise.resolve(); }
     createGain() { const gain = { gain: { value: 1 }, connect() {} }; gains.push(gain); return gain; }
-    createBuffer(channels, length) { const data = new Float32Array(length); const buffer = { length, getChannelData: () => data }; buffers.push(buffer); return buffer; }
+    createBuffer(channels, length, sampleRate) { const data = new Float32Array(length); const buffer = { length, sampleRate, duration: length / sampleRate, getChannelData: () => data }; buffers.push(buffer); return buffer; }
     createBufferSource() { const source = { connect() {}, disconnect() {}, start() { this.started = true; }, stop() { this.stopped = true; } }; sources.push(source); return source; }
   }
   const window = new Element();
+  window.atob = value => Buffer.from(value, 'base64').toString('binary');
+  if (!missingRecording) vm.runInNewContext(audioCode, { window });
   window.AudioContext = audio ? AudioContext : undefined;
   window.setTimeout = (callback, delay) => { const id = ++nextTimer; timers.set(id, { callback, at: clock + delay, delay }); return id; };
   window.clearTimeout = id => timers.delete(id);
@@ -124,14 +127,16 @@ test('mute before start survives replay and never plays sound', () => {
   assert.equal(env.buttons[1].attributes['aria-pressed'], 'false');
 });
 
-test('audio starts from interaction, waveform is bounded, mute stops the source', () => {
+test('original 2.5s scream plays at 100% gain without clipping; mute stops it', () => {
   const env = setup();
   env.ids.start.click();
   assert.equal(env.sources.length, 1); // Silent unlock only.
   const samples = env.buffers[0].getChannelData(0);
   const peak = samples.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
-  assert.ok(peak <= 0.160001);
-  assert.equal(env.gains[0].gain.value, 0.6);
+  assert.ok(peak > 0.98 && peak <= 0.99);
+  assert.equal(env.buffers[0].duration, 2.5);
+  assert.equal(env.buffers[0].sampleRate, 44100);
+  assert.equal(env.gains[0].gain.value, 1);
   env.tick(10000);
   assert.equal(env.sources.length, 2);
   assert.equal(env.sources[1].started, true);
@@ -177,7 +182,7 @@ test('hidden tab during the effect stops audio', () => {
 });
 
 test('missing or blocked Web Audio does not break the game', async () => {
-  for (const config of [{ audio: false }, { resumeFails: true }]) {
+  for (const config of [{ audio: false }, { resumeFails: true }, { missingRecording: true }]) {
     const env = setup(config);
     env.ids.start.click();
     await Promise.resolve();
@@ -194,4 +199,18 @@ test('duplicate start does not stack surprise timers', () => {
   env.ids.start.click();
   env.ids.start.click();
   assert.equal(env.timers.size, 1);
+});
+
+test('unmuting restores full volume on replay without replaying an active scream', () => {
+  const env = setup();
+  env.ids.start.click();
+  env.tick(10000);
+  env.buttons[1].click();
+  env.buttons[1].click();
+  assert.equal(env.gains[0].gain.value, 1);
+  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 1);
+  env.ids['close-scare'].click();
+  env.ids.restart.click();
+  env.tick(10000);
+  assert.equal(env.sources.filter(source => source.buffer.length > 1).length, 2);
 });
