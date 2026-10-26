@@ -1,24 +1,19 @@
 (() => {
   'use strict';
 
-  const MIN_DELAY = 8000;
-  const MAX_DELAY = 12000;
-  const AUDIO_GAIN = 1; // 100% site volume. The source PCM peaks at 0.99, without added clipping.
-  const $ = (id) => document.getElementById(id);
-  const board = $('board');
-  const scare = $('scare');
-  let state = 'ready';
-  let score = 0;
-  let target = 0;
+  const TRIGGER_DELAY = 3000;
+  const AUDIO_GAIN = 1;
+  const page = document.getElementById('page');
+  const scare = document.getElementById('scare');
+  let state = document.hidden ? 'idle' : 'waiting';
   let triggerTimer;
   let audioContext;
   let masterGain;
   let soundBuffer;
   let source;
-  let audioUnavailable = false;
+  let activatingAudio = false;
 
-  // The original scream is bundled as PCM16. No network fetch or decoder is
-  // needed here, so opening index.html directly from disk also works.
+  // Local PCM also works when index.html is opened directly from disk.
   function loadSound(context) {
     const recording = window.SCARE_AUDIO;
     if (!recording || !recording.base64 || !recording.sampleRate) throw new Error('Missing audio');
@@ -34,36 +29,6 @@
     return buffer;
   }
 
-  function markAudioUnavailable() {
-    audioUnavailable = true;
-    $('feedback').textContent = 'Звук недоступен в этом браузере. Игра продолжается.';
-  }
-
-  function unlockAudio() {
-    try {
-      if (!audioContext) {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) throw new Error('Web Audio unavailable');
-        audioContext = new AudioContextClass();
-        masterGain = audioContext.createGain();
-        masterGain.gain.value = AUDIO_GAIN;
-        masterGain.connect(audioContext.destination);
-      }
-      if (!soundBuffer) soundBuffer = loadSound(audioContext);
-      // resume() and a silent source run directly in the click handler, including iOS.
-      const resumed = audioContext.resume();
-      Promise.resolve(resumed).catch(markAudioUnavailable);
-      const silent = audioContext.createBufferSource();
-      silent.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
-      silent.connect(masterGain);
-      silent.onended = () => silent.disconnect();
-      silent.start();
-      audioUnavailable = false;
-    } catch {
-      markAudioUnavailable();
-    }
-  }
-
   function stopSound() {
     if (!source) return;
     const previous = source;
@@ -73,8 +38,7 @@
   }
 
   function playSound() {
-    if (audioUnavailable || !audioContext || audioContext.state !== 'running') return;
-    stopSound();
+    if (state !== 'scare' || document.hidden || source || !soundBuffer || audioContext?.state !== 'running') return;
     try {
       const current = audioContext.createBufferSource();
       current.buffer = soundBuffer;
@@ -86,104 +50,72 @@
       };
       source = current;
       current.start();
-    } catch {
-      stopSound();
-      markAudioUnavailable();
-    }
+    } catch { stopSound(); }
   }
 
-  function renderBoard() {
-    const focusedIndex = [...board.children].indexOf(document.activeElement);
-    target = Math.floor(Math.random() * 16);
-    const hue = (score * 31 + 91) % 360;
-    const difference = Math.max(5, 13 - score);
-    const fragment = document.createDocumentFragment();
-    for (let i = 0; i < 16; i++) {
-      const tile = document.createElement('button');
-      tile.type = 'button';
-      tile.className = 'tile';
-      tile.setAttribute('aria-label', `Квадрат ${i + 1}`);
-      tile.style.setProperty('--tile-color', `hsl(${hue} 28% ${i === target ? 59 + difference : 59}%)`);
-      tile.disabled = state !== 'playing';
-      tile.addEventListener('click', () => chooseTile(i));
-      fragment.appendChild(tile);
-    }
-    board.replaceChildren(fragment);
-    if (state === 'playing' && focusedIndex >= 0) board.children[focusedIndex].focus({ preventScroll: true });
-  }
-
-  function chooseTile(index) {
-    if (state !== 'playing') return;
-    if (index !== target) {
-      $('feedback').textContent = 'Почти! Присмотритесь ещё раз.';
-      return;
-    }
-    score++;
-    $('score').textContent = String(score).padStart(2, '0');
-    $('feedback').textContent = 'Верно! А теперь найдите следующий.';
-    renderBoard();
-  }
-
-  function clearTimers() {
-    window.clearTimeout(triggerTimer);
-  }
-
-  function startGame() {
-    if (state === 'playing' || state === 'scare') return;
-    clearTimers();
-    stopSound();
-    state = 'playing';
-    score = 0;
-    $('score').textContent = '00';
-    $('start-panel').hidden = true;
-    $('result-panel').hidden = true;
-    $('game-status').textContent = 'ИЩИТЕ ОТЛИЧИЕ';
-    $('feedback').textContent = 'Нажмите на квадрат другого оттенка.';
-    renderBoard();
-    unlockAudio();
-    if (audioUnavailable) $('feedback').textContent = 'Играем без звука. Найдите другой оттенок.';
-    board.children[0].focus({ preventScroll: true });
-    triggerTimer = window.setTimeout(showScare, MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY));
+  function activateAudio(event) {
+    // Ignore navigation/modifier keys; no shortcuts or browser actions are intercepted.
+    if (event.type === 'keydown' && (event.repeat || event.ctrlKey || event.metaKey || event.altKey || ['Escape', 'Tab', 'Shift', 'Control', 'Alt', 'Meta'].includes(event.key))) return;
+    if (state === 'stopped' || document.hidden || activatingAudio) return;
+    if (audioContext?.state === 'running' && soundBuffer) { playSound(); return; }
+    try {
+      if (!audioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioContext = new AudioContextClass();
+        masterGain = audioContext.createGain();
+        masterGain.gain.value = AUDIO_GAIN;
+        masterGain.connect(audioContext.destination);
+      }
+      if (!soundBuffer) soundBuffer = loadSound(audioContext);
+      activatingAudio = true;
+      // Called synchronously inside a click/key gesture, including mobile taps.
+      const resumed = audioContext.resume();
+      const silent = audioContext.createBufferSource();
+      silent.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+      silent.connect(masterGain);
+      silent.onended = () => silent.disconnect();
+      silent.start();
+      Promise.resolve(resumed).then(() => {
+        activatingAudio = false;
+        playSound();
+      }, () => { activatingAudio = false; });
+    } catch { activatingAudio = false; }
   }
 
   function showScare() {
-    if (state !== 'playing') return;
-    if (document.hidden) { finishGame(); return; }
+    if (state !== 'waiting') return;
+    if (document.hidden) { stopEffect(); return; }
     state = 'scare';
     scare.hidden = false;
-    $('page').inert = true;
+    page.inert = true;
     document.body.classList.add('effect-open');
+    // Blur the draft field to dismiss the phone keyboard before showing the effect.
+    document.activeElement?.blur();
     scare.focus({ preventScroll: true });
     playSound();
   }
 
-  function finishGame() {
-    if (state !== 'playing' && state !== 'scare') return;
-    const wasPrank = state === 'scare';
-    clearTimers();
+  function stopEffect() {
+    window.clearTimeout(triggerTimer);
+    state = 'stopped';
     stopSound();
-    state = 'finished';
     scare.hidden = true;
-    $('page').inert = false;
+    page.inert = false;
     document.body.classList.remove('effect-open');
-    [...board.children].forEach((tile) => { tile.disabled = true; });
-    $('result-panel').hidden = false;
-    $('final-score').textContent = String(score);
-    $('game-status').textContent = 'РАУНД ЗАВЕРШЁН';
-    $('feedback').textContent = 'Ещё один раунд?';
-    $('result-title').textContent = wasPrank ? 'Это был розыгрыш!' : 'Раунд завершён';
-    $('result-description').textContent = wasPrank
-      ? 'Всё хорошо. Наш загадочный гость уже ушёл.'
-      : 'Вы отвлеклись — мы остановили игру. Начните снова, когда будете готовы.';
-    $('result-panel').querySelector('.eyebrow').textContent = wasPrank ? 'НЕОЖИДАННЫЙ ФИНАЛ' : 'МОЖНО СДЕЛАТЬ ПАУЗУ';
-    $('result-panel').querySelector('.start-hint').textContent = wasPrank ? 'Теперь вы знаете наш маленький секрет.' : 'Новый раунд начнётся только по нажатию.';
   }
 
-  $('start').addEventListener('click', startGame);
-  $('restart').addEventListener('click', startGame);
+  document.addEventListener('click', activateAudio);
+  document.addEventListener('keydown', activateAudio);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) finishGame();
+    if (document.hidden) {
+      if (state !== 'idle') stopEffect();
+    } else if (state === 'idle') {
+      state = 'waiting';
+      triggerTimer = window.setTimeout(showScare, TRIGGER_DELAY);
+    }
   });
-  window.addEventListener('pagehide', finishGame);
-  renderBoard();
+  window.addEventListener('pagehide', stopEffect);
+  // Visiting the page starts the visual timer; sound still requires a user gesture.
+  if (state === 'waiting') triggerTimer = window.setTimeout(showScare, TRIGGER_DELAY);
 })();

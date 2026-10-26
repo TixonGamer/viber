@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f5f5ee">
-  <meta name="description" content="Небольшая игра на внимательность. Найдите квадрат, который отличается оттенком.">
-  <title>Оттенок — проверь свою внимательность</title>
+  <meta name="theme-color" content="#7360b8">
+  <meta name="description" content="Личный диалог с Тихоном.">
+  <title>Тихон — диалог</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="preload" href="./assets/scare-face.jpg" as="image">
   <link rel="stylesheet" href="./styles.css">
@@ -13,42 +13,46 @@
   <script src="./app.js" defer></script>
 </head>
 <body>
-  <div id="page" class="page">
-    <header class="header">
-      <a class="brand" href="./" aria-label="Оттенок — главная"><img src="./assets/icon.svg" width="34" height="34" alt="">оттенок<span class="brand-dot">.</span></a>
-      <span class="header-caption">МАЛЕНЬКАЯ ПАУЗА ДЛЯ МОЗГА</span>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7M7 12h14"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M7 3H4a1 1 0 0 0-1 1c0 9.4 7.6 17 17 17a1 1 0 0 0 1-1v-3l-5-2-2 2a15 15 0 0 1-7-7l2-2Z"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 14s1 3 4 3 4-3 4-3M8 8.5h.01M16 8.5h.01"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 7h4l2-3h4l2 3h4a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1Z"/><circle cx="12" cy="13" r="4"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 6-6 5 5 3-3 4 4"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M9 21h6"/></symbol>
+    <symbol id="i-sticker" viewBox="0 0 24 24"><path d="M20 14V6a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v11a3 3 0 0 0 3 3h8l6-6ZM14 20v-3a3 3 0 0 1 3-3h3M7 8h.01M13 8h.01M7 12s1 2 3 2 3-2 3-2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5a9 9 0 0 1-9 9 10 10 0 0 1-4-.8L3 21l1.3-4.8A9 9 0 1 1 21 11.5Z"/><path d="M8 9h8M8 13h5"/></symbol>
+  </svg>
+
+  <main id="page" class="chat-window" aria-label="Диалог с Тихоном">
+    <header class="chat-header">
+      <span class="header-icon" aria-hidden="true"><svg><use href="#i-back"/></svg></span>
+      <div class="avatar" aria-hidden="true">Т</div>
+      <div class="contact"><h1>Тихон</h1><p>Личный диалог</p></div>
+      <div class="header-actions" aria-hidden="true"><svg><use href="#i-phone"/></svg><svg><use href="#i-dots"/></svg></div>
     </header>
 
-    <main class="layout">
-      <section class="intro" aria-labelledby="title">
-        <div class="eyebrow"><span></span> ИГРА НА ВНИМАТЕЛЬНОСТЬ <span class="edition">№ 01</span></div>
-        <h1 id="title">Всё дело <br>в <span>деталях.</span><svg class="underline" viewBox="0 0 300 18" aria-hidden="true"><path d="M3 13 Q140 -5 295 9"/></svg></h1>
-        <p class="lead">Один квадрат чуть-чуть отличается.<br class="desktop-break"> Сможете его заметить?</p>
-        <ol class="steps">
-          <li><span class="step-number">01</span><div><strong>Присмотритесь</strong><p>Найдите другой оттенок среди похожих.</p></div></li>
-          <li><span class="step-number">02</span><div><strong>Нажмите на квадрат</strong><p>Верный ответ откроет новое поле.</p></div></li>
-          <li><span class="step-number">03</span><div><strong>Доверьтесь глазам</strong><p>С каждым ответом разница всё меньше.</p></div></li>
-        </ol>
-        <div class="intro-note"><span aria-hidden="true">✳</span><p>Немного фокуса.<br>И новый взгляд на привычные вещи.</p></div>
-      </section>
+    <section class="conversation" aria-label="Пустой диалог">
+      <span class="date-label">Сегодня</span>
+      <div class="start-note"><svg aria-hidden="true"><use href="#i-chat"/></svg><p>Это начало вашего диалога<br>с Тихоном.</p></div>
+      <div id="messages" class="messages" aria-label="Сообщения"></div>
+    </section>
 
-      <section class="game-card" aria-label="Игровое поле">
-        <div class="game-top"><span class="game-label"><span class="status-dot"></span><span id="game-status">ГОТОВЫ К ИГРЕ?</span></span><span class="round">НАЙДЕНО <strong id="score">00</strong></span></div>
-        <div class="board-wrap">
-          <div class="board" id="board" aria-label="Найдите отличающийся квадрат"></div>
-          <div class="start-panel" id="start-panel">
-            <div class="start-content"><span class="focus-symbol" aria-hidden="true">⌖</span><h2>Поймайте отличие</h2><p>Внимание — ваша суперсила.</p><button class="primary" id="start" type="button">Начать <span aria-hidden="true">↗</span></button><span class="start-hint">Без регистрации. Просто игра.</span></div>
-          </div>
-          <div class="result-panel" id="result-panel" hidden>
-            <div class="result-icon" aria-hidden="true">☺</div><span class="eyebrow">НЕОЖИДАННЫЙ ФИНАЛ</span><h2 id="result-title">Это был розыгрыш!</h2><p id="result-description">Всё хорошо. Наш загадочный гость уже ушёл.</p><p class="result-score">Найдено отличий: <strong id="final-score">0</strong></p><button class="primary" id="restart" type="button">Повторить игру <span aria-hidden="true">↻</span></button><span class="start-hint">Теперь вы знаете наш маленький секрет.</span>
-          </div>
-        </div>
-        <div class="game-bottom"><span id="feedback" role="status" aria-live="polite">У каждого оттенка есть своя история.</span><span class="board-mark" aria-hidden="true">✳</span></div>
-      </section>
-    </main>
-    <footer class="footer"><span>Смотрите внимательнее. Улыбайтесь чаще.</span><span>Без трекеров <span class="footer-dot">·</span> Всё происходит в вашем браузере</span></footer>
-    <noscript><p class="noscript">Для игры включите JavaScript в настройках браузера.</p></noscript>
-  </div>
+    <footer class="composer">
+      <div class="message-row">
+        <input id="message" type="text" placeholder="Напишите сообщение…" aria-label="Черновик сообщения" maxlength="1000" autocomplete="off" spellcheck="false">
+        <span class="microphone" aria-hidden="true"><svg><use href="#i-mic"/></svg></span>
+      </div>
+      <div class="composer-tools" aria-hidden="true">
+        <svg><use href="#i-sticker"/></svg><svg><use href="#i-smile"/></svg><svg><use href="#i-camera"/></svg><svg><use href="#i-image"/></svg><span class="tool-dots">•••</span><svg class="add-tool"><use href="#i-plus"/></svg>
+      </div>
+      <p class="draft-note">Черновик · сообщения не отправляются</p>
+    </footer>
+    <noscript><p class="noscript">Для работы страницы включите JavaScript.</p></noscript>
+  </main>
+  <p class="desktop-note">Личный диалог</p>
 
   <div id="scare" class="scare" role="region" aria-labelledby="scare-label" tabindex="-1" hidden>
     <h2 id="scare-label" class="sr-only">Скример повторяется. Чтобы остановить, закройте страницу или перейдите на другую вкладку.</h2>

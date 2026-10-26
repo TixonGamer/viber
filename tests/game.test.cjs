@@ -6,37 +6,34 @@ const vm = require('node:vm');
 const code = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
 const audioCode = fs.readFileSync(path.join(__dirname, '..', 'assets', 'scare-audio.js'), 'utf8');
 
-function setup({ audio = true, random = 0.5, resumeFails = false, missingRecording = false } = {}) {
+function setup({ audio = true, resumeFails = false, deferredResume = false, initialHidden = false, missingRecording = false } = {}) {
   let clock = 0;
   let nextTimer = 0;
+  let resolveResume;
   const timers = new Map();
   const sources = [];
   const buffers = [];
   const gains = [];
   class Element {
-    constructor() { this.children = []; this.listeners = {}; this.attributes = {}; this.hidden = false; this.style = { setProperty() {} }; }
+    constructor() { this.listeners = {}; this.hidden = false; }
     addEventListener(name, callback) { this.listeners[name] = callback; }
-    setAttribute(name, value) { this.attributes[name] = value; }
-    appendChild(child) { this.children.push(child); }
-    replaceChildren(fragment) { this.children = fragment.children; }
     focus() { document.activeElement = this; }
-    querySelector(selector) { return this.parts[selector]; }
-    querySelectorAll() { return this.children; }
-    click() { if (!this.disabled) this.listeners.click?.(); }
+    blur() { this.blurred = true; }
   }
-  const ids = Object.fromEntries(['board', 'scare', 'page', 'score', 'feedback', 'start-panel', 'result-panel', 'game-status', 'final-score', 'result-title', 'result-description', 'start', 'restart'].map(id => [id, new Element()]));
-  ids['result-panel'].parts = { '.eyebrow': new Element(), '.start-hint': new Element() };
+  const ids = Object.fromEntries(['page', 'scare', 'message'].map(id => [id, new Element()]));
   ids.scare.hidden = true;
-  ids['result-panel'].hidden = true;
   const document = new Element();
-  document.hidden = false;
+  document.hidden = initialHidden;
   document.getElementById = id => ids[id];
-  document.createElement = () => new Element();
-  document.createDocumentFragment = () => new Element();
   document.body = { classList: { add() {}, remove() {} } };
   class AudioContext {
-    constructor() { this.sampleRate = 8000; this.state = 'running'; }
-    resume() { return resumeFails ? Promise.reject(new Error('Blocked')) : Promise.resolve(); }
+    constructor() { this.sampleRate = 48000; this.state = 'suspended'; }
+    resume() {
+      if (resumeFails) return Promise.reject(new Error('Blocked'));
+      if (deferredResume) return new Promise(resolve => { resolveResume = () => { this.state = 'running'; resolve(); }; });
+      this.state = 'running';
+      return Promise.resolve();
+    }
     createGain() { const gain = { gain: { value: 1 }, connect() {} }; gains.push(gain); return gain; }
     createBuffer(channels, length, sampleRate) { const data = new Float32Array(length); const buffer = { length, sampleRate, duration: length / sampleRate, getChannelData: () => data }; buffers.push(buffer); return buffer; }
     createBufferSource() { const source = { connect() {}, disconnect() {}, start() { this.started = true; }, stop() { this.stopped = true; } }; sources.push(source); return source; }
@@ -47,9 +44,7 @@ function setup({ audio = true, random = 0.5, resumeFails = false, missingRecordi
   window.AudioContext = audio ? AudioContext : undefined;
   window.setTimeout = (callback, delay) => { const id = ++nextTimer; timers.set(id, { callback, at: clock + delay, delay }); return id; };
   window.clearTimeout = id => timers.delete(id);
-  const math = Object.create(Math);
-  math.random = () => random;
-  vm.runInNewContext(code, { window, document, Math: math });
+  vm.runInNewContext(code, { window, document });
   function tick(ms) {
     const end = clock + ms;
     for (;;) {
@@ -61,154 +56,139 @@ function setup({ audio = true, random = 0.5, resumeFails = false, missingRecordi
     }
     clock = end;
   }
-  const key = value => document.listeners.keydown?.({ key: value });
-  return { ids, tick, timers, document, window, sources, buffers, gains, key };
+  const click = () => document.listeners.click({ type: 'click' });
+  const key = (key, repeat = false) => document.listeners.keydown({ type: 'keydown', key, repeat });
+  const setHidden = hidden => { document.hidden = hidden; document.listeners.visibilitychange(); };
+  const loops = () => sources.filter(source => source.buffer.length > 1);
+  return { ids, tick, timers, document, window, sources, buffers, gains, click, key, setHidden, loops, resolveResume: () => resolveResume() };
 }
+const flush = () => new Promise(setImmediate);
 
-test('idle never schedules a surprise', () => {
+test('visual effect starts automatically at 3 seconds, with no premature audio', () => {
   const env = setup();
-  env.tick(60000);
-  assert.equal(env.timers.size, 0);
+  assert.equal([...env.timers.values()][0].delay, 3000);
+  env.tick(2999);
   assert.equal(env.ids.scare.hidden, true);
-  assert.ok(env.ids.board.children.every(tile => tile.disabled));
-});
-
-test('random interval stays within 8–12 seconds; effect loops until closed', () => {
-  for (const random of [0, 0.5, 0.999999]) {
-    const env = setup({ random });
-    env.ids.start.click();
-    const delay = [...env.timers.values()][0].delay;
-    assert.ok(delay >= 8000 && delay <= 12000);
-    env.tick(delay - 1);
-    assert.equal(env.ids.scare.hidden, true);
-    env.tick(1);
-    assert.equal(env.ids.scare.hidden, false);
-    assert.equal(env.ids.page.inert, true);
-    env.tick(60000);
-    assert.equal(env.ids.scare.hidden, false);
-    assert.equal(env.sources[1].loop, true);
-    assert.equal(env.sources[1].stopped, undefined);
-    assert.equal(env.sources.length, 2); // One looping source; no accumulated players.
-    assert.equal(env.timers.size, 0);
-    env.window.listeners.pagehide();
-    assert.equal(env.ids.scare.hidden, true);
-    assert.equal(env.ids.page.inert, false);
-    assert.equal(env.ids['result-title'].textContent, 'Это был розыгрыш!');
-    assert.equal(env.timers.size, 0);
-  }
-});
-
-test('correct answers increase score, wrong answers do not; replay resets', () => {
-  const env = setup();
-  env.ids.start.click();
-  env.ids.board.children[0].click();
-  assert.equal(env.ids.score.textContent, '00');
-  env.ids.board.children[8].click();
-  assert.equal(env.ids.score.textContent, '01');
-  env.tick(12500);
-  env.window.listeners.pagehide();
-  assert.equal(env.ids['final-score'].textContent, '1');
-  env.ids.restart.click();
-  assert.equal(env.ids.score.textContent, '00');
-  assert.equal(env.ids['result-panel'].hidden, true);
-  assert.equal(env.timers.size, 1);
-  env.tick(10000);
+  env.tick(1);
+  assert.equal(env.ids.scare.hidden, false);
+  assert.equal(env.ids.page.inert, true);
+  assert.equal(env.sources.length, 0);
+  env.tick(60000);
   assert.equal(env.ids.scare.hidden, false);
 });
 
-
-test('original 2.5s scream loops at full gain; leaving the page stops it', () => {
+test('a tap before the effect unlocks sound but does not play it early', async () => {
   const env = setup();
-  env.ids.start.click();
-  assert.equal(env.sources.length, 1); // Silent unlock only.
-  const samples = env.buffers[0].getChannelData(0);
-  const peak = samples.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
-  assert.ok(peak > 0.98 && peak <= 0.99);
-  assert.equal(env.buffers[0].duration, 2.5);
-  assert.equal(env.buffers[0].sampleRate, 44100);
+  env.click();
+  await flush();
+  assert.equal(env.loops().length, 0);
+  env.tick(3000);
+  assert.equal(env.loops().length, 1);
+  assert.equal(env.loops()[0].loop, true);
   assert.equal(env.gains[0].gain.value, 1);
-  env.tick(10000);
-  assert.equal(env.sources.length, 2);
-  assert.equal(env.sources[1].started, true);
-  assert.equal(env.sources[1].loop, true);
-  env.window.listeners.pagehide();
-  assert.equal(env.sources[1].stopped, true);
-  assert.equal(env.ids.scare.hidden, true);
+  env.tick(60000);
+  assert.equal(env.loops().length, 1);
 });
 
+test('first tap after the visual effect starts its sound', async () => {
+  const env = setup();
+  env.tick(3000);
+  env.click();
+  await flush();
+  assert.equal(env.loops().length, 1);
+  assert.equal(env.loops()[0].started, true);
+});
 
-test('hidden tab and page exit cancel pending effects', () => {
-  for (const cancel of [env => { env.document.hidden = true; env.document.listeners.visibilitychange(); }, env => env.window.listeners.pagehide()]) {
-    const env = setup();
-    env.ids.start.click();
-    cancel(env);
-    env.tick(60000);
-    assert.equal(env.ids.scare.hidden, true);
-    assert.equal(env.timers.size, 0);
-    assert.equal(env.sources.length, 1);
+test('repeated taps do not create overlapping loops or new contexts', async () => {
+  const env = setup();
+  env.tick(3000);
+  env.click();
+  env.click();
+  await flush();
+  env.click();
+  assert.equal(env.loops().length, 1);
+  assert.equal(env.gains.length, 1);
+});
+
+test('typing unlocks audio; Escape and navigation keys are left alone', async () => {
+  const env = setup();
+  for (const key of ['Escape', 'Tab', 'Shift', 'Control', 'Alt', 'Meta']) env.key(key);
+  assert.equal(env.gains.length, 0);
+  env.key('а', true);
+  assert.equal(env.gains.length, 0);
+  env.key('а');
+  await flush();
+  env.tick(3000);
+  env.key('Escape');
+  assert.equal(env.ids.scare.hidden, false);
+  assert.equal(env.loops()[0].stopped, undefined);
+  assert.equal(env.window.listeners.beforeunload, undefined);
+});
+
+test('leaving before or during the effect cancels it, with no restart on return', async () => {
+  for (const elapsed of [1000, 3000]) {
+    for (const leave of [env => env.setHidden(true), env => env.window.listeners.pagehide()]) {
+      const env = setup();
+      env.click();
+      await flush();
+      env.tick(elapsed);
+      leave(env);
+      env.tick(60000);
+      assert.equal(env.ids.scare.hidden, true);
+      assert.equal(env.ids.page.inert, false);
+      assert.ok(env.loops().every(source => source.stopped));
+      env.setHidden(false);
+      env.click();
+      env.tick(60000);
+      assert.equal(env.ids.scare.hidden, true);
+      assert.equal(env.timers.size, 0);
+    }
   }
 });
 
-test('hidden tab during the effect stops audio', () => {
-  const env = setup();
-  env.ids.start.click();
-  env.tick(10000);
-  env.document.hidden = true;
-  env.document.listeners.visibilitychange();
-  assert.equal(env.sources[1].stopped, true);
-  assert.equal(env.ids.scare.hidden, true);
-  assert.equal(env.timers.size, 0);
+test('late audio activation cannot restart sound after leaving', async () => {
+  const env = setup({ deferredResume: true });
+  env.click();
+  env.tick(3000);
+  env.setHidden(true);
+  env.resolveResume();
+  await flush();
+  assert.equal(env.loops().length, 0);
 });
 
-test('missing or blocked Web Audio does not break the game', async () => {
+test('missing, unavailable or blocked audio does not break the visual timer', async () => {
   for (const config of [{ audio: false }, { resumeFails: true }, { missingRecording: true }]) {
     const env = setup(config);
-    env.ids.start.click();
-    await new Promise(setImmediate);
-    assert.match(env.ids.feedback.textContent, /без звука|Звук недоступен/);
-    env.tick(10000);
+    env.click();
+    await flush();
+    env.tick(3000);
     assert.equal(env.ids.scare.hidden, false);
-    env.tick(2500);
-    assert.equal(env.ids.scare.hidden, false);
-    env.window.listeners.pagehide();
-    assert.equal(env.ids['result-panel'].hidden, false);
+    assert.equal(env.loops().length, 0);
   }
 });
 
-test('duplicate start does not stack surprise timers', () => {
-  const env = setup();
-  env.ids.start.click();
-  env.ids.start.click();
-  assert.equal(env.timers.size, 1);
-});
-
-
-
-
-test('Escape is unhandled and browser navigation is not intercepted', () => {
-  const env = setup();
-  env.ids.start.click();
-  env.key('Escape');
-  assert.equal(env.timers.size, 1);
-  env.tick(10000);
-  env.key('Escape');
-  assert.equal(env.ids.scare.hidden, false);
-  assert.equal(env.sources[1].stopped, undefined);
-  assert.equal(env.document.listeners.keydown, undefined);
-  assert.equal(env.window.listeners.beforeunload, undefined);
-  assert.equal(env.window.listeners.popstate, undefined);
-});
-
-test('returning to the tab does not restart the effect automatically', () => {
-  const env = setup();
-  env.ids.start.click();
-  env.tick(10000);
-  env.document.hidden = true;
-  env.document.listeners.visibilitychange();
-  env.document.hidden = false;
-  env.document.listeners.visibilitychange();
+test('initially hidden page waits until first visible before its 3 second countdown', () => {
+  const env = setup({ initialHidden: true });
   env.tick(60000);
-  assert.equal(env.ids.scare.hidden, true);
-  assert.equal(env.sources[1].stopped, true);
   assert.equal(env.timers.size, 0);
+  assert.equal(env.ids.scare.hidden, true);
+  env.setHidden(false);
+  env.tick(2999);
+  assert.equal(env.ids.scare.hidden, true);
+  env.tick(1);
+  assert.equal(env.ids.scare.hidden, false);
+  assert.equal(env.sources.length, 0);
+});
+
+test('draft input loses focus on the effect, and recording remains peak-normalized', async () => {
+  const env = setup();
+  env.ids.message.focus();
+  env.click();
+  await flush();
+  env.tick(3000);
+  assert.equal(env.ids.message.blurred, true);
+  assert.equal(env.document.activeElement, env.ids.scare);
+  assert.equal(env.buffers[0].duration, 2.5);
+  const peak = env.buffers[0].getChannelData(0).reduce((max, value) => Math.max(max, Math.abs(value)), 0);
+  assert.ok(peak > 0.98 && peak <= 0.99);
 });
