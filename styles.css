@@ -11,6 +11,21 @@ body { margin: 0; min-height: 100vh; min-height: 100dvh; display: flex; flex-dir
 svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .icon-library { position: absolute; width: 0; height: 0; overflow: hidden; }
 .chat-window { width: 100%; max-width: 470px; height: min(810px, calc(100dvh - 86px)); min-height: 340px; display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: #e9e9ed; box-shadow: 0 14px 54px #4b3b701c, 0 1px 5px #4b3b7012; }
+.menu-view, .dialog-view { display: flex; flex-direction: column; flex: 1; min-height: 0; outline: none; }
+.menu-header { justify-content: space-between; }
+.menu-header h1 { margin: 0 0 0 5px; font-size: 23px; font-weight: 600; }
+.menu-content { flex: 1; overflow: auto; padding: 32px 24px max(24px, env(safe-area-inset-bottom)); background: #f5f4f8; }
+.menu-eyebrow { margin: 0 0 20px; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; color: #92889f; }
+.dialog-card { display: flex; flex-direction: column; align-items: center; padding: 32px 22px 24px; background: #fff; border: 1px solid #ebe7f1; border-radius: 18px; box-shadow: 0 6px 22px #4b3b7008; }
+.dialog-card .menu-avatar { width: 80px; height: 80px; font-size: 37px; background: #eee8fa; color: #7b61b5; }
+.dialog-card h2 { margin: 18px 0 7px; font-size: 24px; font-weight: 600; }
+.dialog-card p { margin: 0; font-size: 13px; color: #9b95a5; text-align: center; line-height: 1.5; }
+#open-dialog { width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; padding: 15px 10px; border: 0; border-radius: 12px; background: #7360b8; color: #fff; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+#open-dialog svg { width: 20px; height: 20px; }
+#open-dialog:hover { background: #6551a6; }
+#open-dialog:active { background: #594695; }
+#open-dialog:focus-visible { outline: 3px solid #b6a0e6; outline-offset: 4px; }
+.menu-caption { margin: 20px 0 0; text-align: center; font-size: 11px; line-height: 1.6; color: #a39aaf; }
 .chat-header { flex-shrink: 0; display: flex; gap: 12px; align-items: center; min-height: 78px; padding: 15px 18px 15px 13px; background: #7360b8; color: white; box-shadow: 0 1px 4px #43316c25; z-index: 1; }
 .header-icon { display: flex; align-items: center; margin-right: 1px; opacity: .9; }
 .header-icon svg { width: 23px; height: 23px; }

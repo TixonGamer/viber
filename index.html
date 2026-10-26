@@ -27,6 +27,23 @@
   </svg>
 
   <main id="page" class="chat-window" aria-label="Диалог с Тихоном">
+    <section id="menu" class="menu-view" aria-labelledby="menu-title">
+      <header class="chat-header menu-header">
+        <h1 id="menu-title">Чаты</h1>
+        <svg aria-hidden="true"><use href="#i-chat"/></svg>
+      </header>
+      <div class="menu-content">
+        <p class="menu-eyebrow">ЛИЧНЫЕ ДИАЛОГИ</p>
+        <div class="dialog-card">
+          <div class="avatar menu-avatar" aria-hidden="true">Т</div>
+          <h2>Тихон</h2>
+          <p>Ваш диалог начинается здесь</p>
+          <button id="open-dialog" type="button"><svg aria-hidden="true"><use href="#i-chat"/></svg>Открыть диалог</button>
+        </div>
+        <p class="menu-caption">Нажмите, чтобы перейти к переписке</p>
+      </div>
+    </section>
+    <div id="dialog" class="dialog-view" tabindex="-1" aria-label="Диалог с Тихоном" hidden>
     <header class="chat-header">
       <span class="header-icon" aria-hidden="true"><svg><use href="#i-back"/></svg></span>
       <div class="avatar" aria-hidden="true">Т</div>
@@ -50,6 +67,7 @@
       </div>
       <p class="draft-note">Черновик · сообщения не отправляются</p>
     </footer>
+    </div>
     <noscript><p class="noscript">Для работы страницы включите JavaScript.</p></noscript>
   </main>
   <p class="desktop-note">Личный диалог</p>

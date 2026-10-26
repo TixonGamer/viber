@@ -5,7 +5,10 @@
   const AUDIO_GAIN = 1;
   const page = document.getElementById('page');
   const scare = document.getElementById('scare');
-  let state = document.hidden ? 'idle' : 'waiting';
+  const menu = document.getElementById('menu');
+  const dialog = document.getElementById('dialog');
+  const openButton = document.getElementById('open-dialog');
+  let state = 'ready';
   let triggerTimer;
   let audioContext;
   let masterGain;
@@ -56,7 +59,7 @@
   function activateAudio(event) {
     // Ignore navigation/modifier keys; no shortcuts or browser actions are intercepted.
     if (event.type === 'keydown' && (event.repeat || event.ctrlKey || event.metaKey || event.altKey || ['Escape', 'Tab', 'Shift', 'Control', 'Alt', 'Meta'].includes(event.key))) return;
-    if (state === 'stopped' || document.hidden || activatingAudio) return;
+    if (!['waiting', 'scare'].includes(state) || document.hidden || activatingAudio) return;
     if (audioContext?.state === 'running' && soundBuffer) { playSound(); return; }
     try {
       if (!audioContext) {
@@ -98,24 +101,31 @@
 
   function stopEffect() {
     window.clearTimeout(triggerTimer);
-    state = 'stopped';
+    state = 'ready';
     stopSound();
     scare.hidden = true;
     page.inert = false;
+    menu.hidden = false;
+    dialog.hidden = true;
     document.body.classList.remove('effect-open');
   }
 
+  function openDialog(event) {
+    if (state !== 'ready' || document.hidden) return;
+    state = 'waiting';
+    // Unlock audio directly in the button gesture, before the delayed effect.
+    activateAudio(event);
+    menu.hidden = true;
+    dialog.hidden = false;
+    dialog.focus({ preventScroll: true });
+    triggerTimer = window.setTimeout(showScare, TRIGGER_DELAY);
+  }
+
+  openButton.addEventListener('click', openDialog);
   document.addEventListener('click', activateAudio);
   document.addEventListener('keydown', activateAudio);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      if (state !== 'idle') stopEffect();
-    } else if (state === 'idle') {
-      state = 'waiting';
-      triggerTimer = window.setTimeout(showScare, TRIGGER_DELAY);
-    }
+    if (document.hidden) stopEffect();
   });
   window.addEventListener('pagehide', stopEffect);
-  // Visiting the page starts the visual timer; sound still requires a user gesture.
-  if (state === 'waiting') triggerTimer = window.setTimeout(showScare, TRIGGER_DELAY);
 })();
